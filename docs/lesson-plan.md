@@ -210,11 +210,13 @@ mvn -Dtest=OrderLineServiceTest test
 
 The method `updateLineRejectsStaleVersion` must pass.
 
-The earlier tests continue to pass:
+The earlier tests continue to pass (reading order — Lesson 9 comes before the idempotency-key lessons, so omit `OrderControllerIdempotencyTest`):
 
 ```
-mvn -Dtest=OrderControllerTest,OrderControllerIdempotencyTest,OrderOptimisticLockTest,OrderServiceTransactionTest test
+mvn -Dtest=OrderControllerTest,OrderOptimisticLockTest,OrderServiceTransactionTest test
 ```
+
+Under **tag order** only (after `lesson-4` already existed when `lesson-9` landed), you may also include `OrderControllerIdempotencyTest`.
 
 ## Lesson 4: Idempotency Key Claim and Replay
 
@@ -253,6 +255,8 @@ The key lives in its own table, not on the Order. The front end is expected to s
 
 ### Verify Your Work
 
+**At tag `lesson-4`:** check out the tag before running these commands (`git checkout lesson-4`). They apply to the code and test names as of that tag, not necessarily on `main` (where Lesson 12 renamed claim/complete paths to `runOrReplay`).
+
 Run the new controller tests:
 
 ```
@@ -261,7 +265,7 @@ mvn -Dtest=OrderControllerIdempotencyTest test
 
 The following methods must pass:
 
-- `createWithNewKeyRunOrReplayCompletes`
+- `createWithNewKeyClaimsAndCompletes`
 - `createWithCompletedKeyReplaysStoredResponse`
 
 The earlier tests continue to pass:
@@ -355,6 +359,8 @@ The user id comes from a header for this lesson. A later lesson can replace the 
 
 ### Verify Your Work
 
+**At tag `lesson-6`:** check out the tag before running these commands (`git checkout lesson-6`). They apply to the code and test names as of that tag, not necessarily on `main`.
+
 Run the controller idempotency tests:
 
 ```
@@ -363,7 +369,7 @@ mvn -Dtest=OrderControllerIdempotencyTest test
 
 The following methods must pass:
 
-- `createWithNewKeyRunOrReplayCompletes`
+- `createWithNewKeyClaimsAndCompletes`
 - `createWithCompletedKeyReplaysStoredResponse`
 - `createWithSameKeyAndDifferentContentThrows`
 - `createWithInProgressKeyThrowsWithKey`
@@ -458,6 +464,8 @@ No additional unique constraint is added. The primary key is sufficient. The rac
 
 ### Verify Your Work
 
+**At tag `lesson-8`:** check out the tag before running these commands (`git checkout lesson-8`). They apply to the code and test names as of that tag, not necessarily on `main` (Lesson 12 later replaces the in-progress race assertion with completed-replay / hash-mismatch cases).
+
 Run the race test:
 
 ```
@@ -476,21 +484,24 @@ mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerTest,OrderOptimisticLoc
 
 Add-line requires an idempotency key. The `Idempotency-Key` header is mandatory (`required = true`); there is no non-idempotent add-line path. The hash includes the Order id so a key reused for a different Order is rejected. A retry with the same key and body returns the stored line instead of inserting another.
 
+**As of tag `lesson-11`:** add-line used the claim-then-complete path (`claimOrReplay` / `complete`), including an in-progress 409. **On `main` after Lesson 12:** the same endpoint calls `runOrReplay` (COMPLETED-only, no in-progress status). Read Lesson 12 for that design; this lesson still teaches requiring the key and hashing the Order id into the path.
+
 ### Learning Objectives
 
 - Require an `Idempotency-Key` on `POST /orders/{id}/lines` (`@RequestHeader(..., required = true)`).
 - Include the Order id in the path that is hashed.
-- Replay a completed add-line or return 409 if it is still in progress.
+- Replay a completed add-line (at tag `lesson-11`, also return 409 while the claim is in progress; on `main` after Lesson 12 there is no in-progress path).
 
 ### Key Concepts
 
-The controller builds the path as `/orders/{id}/lines`. The hash is `userId + path + rawBody`. Because the path contains the Order id, the same key and body applied to a different Order produces a different hash and is rejected as key reuse. Missing or blank keys are rejected by Spring before the handler runs — unlike create, add-line has no bypass that calls the service directly. The claim, replay, and in-progress rules are otherwise the same as for create. The front end is expected to send one request at a time; the server check is a backstop.
+The controller builds the path as `/orders/{id}/lines`. The hash is `userId + path + rawBody`. Because the path contains the Order id, the same key and body applied to a different Order produces a different hash and is rejected as key reuse. Missing or blank keys are rejected by Spring before the handler runs (HTTP 400) — unlike create, add-line has no bypass that calls the service directly. At tag `lesson-11`, claim, replay, and in-progress rules match create; on `main`, Lesson 12's `runOrReplay` replaces claim/complete. The front end is expected to send one request at a time; the server check is a backstop.
 
 ### What You Will Build
 
 - A required `Idempotency-Key` header on `OrderController.addLine` (`required = true`).
 - A path that includes the Order id.
-- A unit test that covers run-or-replay (claim-and-complete at this lesson) and replay for add-line.
+- Unit tests for new-key and completed-key replay on add-line (method names differ at tag vs `main`; see Verify).
+- A MockMvc test that a missing `Idempotency-Key` yields HTTP 400.
 
 ### Deliberate Design Decisions
 
@@ -499,11 +510,13 @@ Update and delete of a line do not take a key. They are already safe when the ha
 ### Implementation Outline
 
 1. Add the `Idempotency-Key` header to `addLine` with `required = true` (no blank-key bypass).
-2. Build the path as `/orders/{id}/lines` and pass it to `claimOrReplay`.
+2. Build the path as `/orders/{id}/lines` and pass it to the idempotency entry point (`claimOrReplay` at tag `lesson-11`; `runOrReplay` on `main` after Lesson 12).
 3. On replay, deserialize the stored body as `OrderLineResponse`.
-4. Add `OrderControllerAddLineIdempotencyTest`.
+4. Add `OrderControllerAddLineIdempotencyTest` and a MockMvc test for a missing key.
 
 ### Verify Your Work
+
+**At tag `lesson-11`:** `git checkout lesson-11`, then run the commands below with the tag-era method names. **On `main`:** use the HEAD method names listed second.
 
 Run the add-line idempotency tests:
 
@@ -511,10 +524,18 @@ Run the add-line idempotency tests:
 mvn -Dtest=OrderControllerAddLineIdempotencyTest test
 ```
 
-The following methods must pass:
+Methods that must pass:
 
-- `addLineWithNewKeyRunOrReplayCompletes`
-- `addLineWithCompletedKeyReplays`
+- At tag `lesson-11`: `addLineWithNewKeyClaimsAndCompletes`, `addLineWithCompletedKeyReplays`
+- On `main`: `addLineWithNewKeyRunOrReplayCompletes`, `addLineWithCompletedKeyReplays`
+
+Run the missing-key MockMvc test (on `main`; proves required header → 400):
+
+```
+mvn -Dtest=OrderControllerAddLineMissingKeyMockMvcTest test
+```
+
+The method `addLineWithoutIdempotencyKeyReturns400` must pass.
 
 The earlier tests continue to pass:
 
