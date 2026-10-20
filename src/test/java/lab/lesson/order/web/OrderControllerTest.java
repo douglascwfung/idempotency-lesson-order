@@ -1,5 +1,7 @@
 package lab.lesson.order.web;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lab.lesson.idem.IdempotencyService;
 import lab.lesson.order.service.OrderService;
 import lab.lesson.order.web.dto.CreateOrderRequest;
 import lab.lesson.order.web.dto.OrderResponse;
@@ -8,8 +10,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -26,6 +26,12 @@ class OrderControllerTest {
     @Mock
     private OrderService orderService;
 
+    @Mock
+    private IdempotencyService idempotencyService;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
     @InjectMocks
     private OrderController orderController;
 
@@ -40,7 +46,7 @@ class OrderControllerTest {
         ));
         when(orderService.create(request)).thenReturn(response);
 
-        OrderResponse result = orderController.create(request);
+        OrderResponse result = orderController.create(null, request);
 
         assertThat(result).isEqualTo(response);
         verify(orderService).create(request);
