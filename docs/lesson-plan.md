@@ -469,3 +469,50 @@ The earlier tests continue to pass:
 ```
 mvn -Dtest=OrderControllerTest,OrderControllerIdempotencyTest,OrderOptimisticLockTest,OrderServiceTransactionTest test
 ```
+
+## Lesson 10: Same-Content In-Progress Check
+
+A request that arrives with a new key but the same body while another request is still running returns 409 with the running key. This check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+
+### Learning Objectives
+
+- Detect a new key whose hash matches an existing in-progress key.
+- Return 409 with the running key so the client can retry with it.
+- Leave a finished request alone so a deliberate second Order is still allowed.
+
+### Key Concepts
+
+The service first looks up the supplied key. When no row exists, it looks for any other row that has the same hash and status `IN_PROGRESS`. If such a row is found, the service throws `IdempotencyInProgressException` carrying that row's key. The client receives 409 and the running key. A completed key with the same hash is not matched; a second Order with the same body is still allowed after the first has finished. The front end is expected to send one request at a time; the server check is a backstop.
+
+### What You Will Build
+
+- A repository method `findFirstByRequestHashAndStatus`.
+- A check in `IdempotencyService.claimOrReplay` that runs after the key lookup and before the insert.
+- A unit test that supplies a new key and asserts the running key is returned.
+
+### Deliberate Design Decisions
+
+The check applies only while a request is in progress. A finished request does not block a later Order with the same body. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+
+### Implementation Outline
+
+1. Add `findFirstByRequestHashAndStatus` to the repository.
+2. After the key lookup returns empty, query for an in-progress key with the same hash.
+3. If one is found, throw `IdempotencyInProgressException` with that key.
+4. Add `IdempotencySameContentTest`.
+
+### Verify Your Work
+
+Run the same-content test:
+
+```
+mvn -Dtest=IdempotencySameContentTest test
+```
+
+The method `newKeyWithSameContentInProgressReturnsRunningKey` must pass.
+
+The earlier tests continue to pass:
+
+```
+mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerTest,IdempotencyServiceRaceTest,OrderLineServiceTest test
+```
