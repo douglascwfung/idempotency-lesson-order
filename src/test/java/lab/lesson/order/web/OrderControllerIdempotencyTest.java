@@ -7,6 +7,7 @@ import lab.lesson.idem.IdempotencyService;
 import lab.lesson.order.service.OrderService;
 import lab.lesson.order.web.dto.CreateOrderRequest;
 import lab.lesson.order.web.dto.OrderResponse;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -41,6 +42,17 @@ class OrderControllerIdempotencyTest {
     @InjectMocks
     private OrderController orderController;
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void setUser(String userId) {
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(userId, null, List.of());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
     @Test
     void createWithNewKeyClaimsAndCompletes() throws Exception {
         CreateOrderRequest request = new CreateOrderRequest("Alice", List.of(
@@ -49,8 +61,7 @@ class OrderControllerIdempotencyTest {
         OrderResponse response = new OrderResponse(1L, "Alice", List.of());
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{\"customerName\":\"Alice\"}");
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("user-1", null));
+        setUser("user-1");
         when(idempotencyService.claimOrReplay(eq("key-1"), eq("user-1"), eq("/orders"), any())).thenReturn(Optional.empty());
         when(orderService.create(request)).thenReturn(response);
         when(objectMapper.writeValueAsString(response)).thenReturn("{\"id\":1}");
@@ -69,8 +80,7 @@ class OrderControllerIdempotencyTest {
         key.setResponseBody("{\"id\":5}");
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{}");
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("user-1", null));
+        setUser("user-1");
         when(idempotencyService.claimOrReplay(eq("key-2"), eq("user-1"), eq("/orders"), any())).thenReturn(Optional.of(key));
         when(objectMapper.readValue(eq("{\"id\":5}"), eq(OrderResponse.class))).thenReturn(stored);
 
@@ -85,8 +95,7 @@ class OrderControllerIdempotencyTest {
         CreateOrderRequest request = new CreateOrderRequest("Bob", List.of());
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{\"customerName\":\"Bob\"}");
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("user-1", null));
+        setUser("user-1");
         when(idempotencyService.claimOrReplay(eq("key-3"), eq("user-1"), eq("/orders"), any()))
                 .thenThrow(new IdempotencyKeyReuseException("key-3"));
 
@@ -99,8 +108,7 @@ class OrderControllerIdempotencyTest {
         CreateOrderRequest request = new CreateOrderRequest("Alice", List.of());
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{}");
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("user-1", null));
+        setUser("user-1");
         when(idempotencyService.claimOrReplay(eq("key-4"), eq("user-1"), eq("/orders"), any()))
                 .thenThrow(new lab.lesson.idem.IdempotencyInProgressException("key-4"));
 
