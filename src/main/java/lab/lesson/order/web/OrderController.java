@@ -38,7 +38,8 @@ public class OrderController {
         }
 
         String rawBody = objectMapper.writeValueAsString(request);
-        Optional<IdempotencyKey> replay = idempotencyService.claimOrReplay(idempotencyKey, "/orders", rawBody);
+        String userId = "user-1";
+        Optional<IdempotencyKey> replay = idempotencyService.claimOrReplay(idempotencyKey, userId, "/orders", rawBody);
 
         if (replay.isPresent()) {
             return objectMapper.readValue(replay.get().getResponseBody(), OrderResponse.class);
