@@ -86,6 +86,34 @@ class IdempotencySingleTransactionTest {
     }
 
     @Test
+    void failureUnderTheLambdaAfterOrderWriteRollsBackKeyAndOrder() throws Exception {
+        CreateOrderRequest request = new CreateOrderRequest(
+                "Dana",
+                List.of(new CreateOrderRequest.OrderLineRequest("SKU-4", 1, new BigDecimal("3.00")))
+        );
+        String rawBody = objectMapper.writeValueAsString(request);
+        long ordersBefore = orderRepository.count();
+
+        assertThatThrownBy(() -> idempotencyService.runOrReplay(
+                "key-st-lambda-fail",
+                "user-1",
+                "/orders",
+                rawBody,
+                201,
+                () -> {
+                    orderService.create(request);
+                    throw new RuntimeException("fail after Order write inside lambda");
+                },
+                objectMapper::writeValueAsString,
+                body -> objectMapper.readValue(body, OrderResponse.class)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("fail after Order write");
+
+        assertThat(keyRepository.findById("key-st-lambda-fail")).isEmpty();
+        assertThat(orderRepository.count()).isEqualTo(ordersBefore);
+    }
+
+    @Test
     void completedKeyReplaysWithoutSecondOrder() throws Exception {
         CreateOrderRequest request = new CreateOrderRequest(
                 "Carol",

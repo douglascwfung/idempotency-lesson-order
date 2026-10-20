@@ -38,6 +38,7 @@ public class OrderController {
 
         String userId = currentUserId();
         String rawBody = objectMapper.writeValueAsString(request);
+        // Pass create as a lambda; the key method owns the transaction and key lifecycle.
         return idempotencyService.runOrReplay(
                 idempotencyKey,
                 userId,
@@ -73,6 +74,7 @@ public class OrderController {
         String userId = currentUserId();
         String path = "/orders/" + id + "/lines";
         String rawBody = objectMapper.writeValueAsString(request);
+        // Pass add-line as a lambda; same key path as create, different domain work.
         return idempotencyService.runOrReplay(
                 idempotencyKey,
                 userId,

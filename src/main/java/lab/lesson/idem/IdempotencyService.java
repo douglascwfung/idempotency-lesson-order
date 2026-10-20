@@ -20,10 +20,18 @@ public class IdempotencyService {
     }
 
     /**
-     * Inserts the key already as COMPLETED, runs the Order write, and stores the response
-     * in one transaction. There is no IN_PROGRESS status. A crash rolls the key and the
-     * Order back together. A concurrent insert of the same key hits the primary key; the
-     * service reloads and either replays the completed response or rejects a hash mismatch.
+     * Key method for one idempotent write. This method owns the transaction and the
+     * key lifecycle. Callers supply only the domain work as a lambda ({@code work}).
+     *
+     * <p>Inserts the key already as COMPLETED, runs {@code work} inside the open
+     * transaction, and stores the response body. There is no IN_PROGRESS status.
+     * A crash rolls the key and the domain rows back together. A concurrent insert
+     * of the same key hits the primary key; the service reloads and either replays
+     * the completed response or rejects a hash mismatch.
+     *
+     * <p>The key method does not know whether {@code work} creates an Order or adds
+     * a line. Controllers pass that action as a lambda so new endpoints reuse this
+     * path without copying claim, race, or replay wiring.
      */
     @Transactional
     public <T> T runOrReplay(String key,
@@ -53,6 +61,7 @@ public class IdempotencyService {
             return replayOrReject(raced, key, hash, deserializer);
         }
 
+        // Domain work runs inside this method's transaction (the box).
         T result = work.get();
         created.setResponseStatus(responseStatus);
         created.setResponseBody(serializer.apply(result));
@@ -81,6 +90,10 @@ public class IdempotencyService {
         }
     }
 
+    /**
+     * Work callback: the domain action passed into {@link #runOrReplay} as a lambda.
+     * Invoked only after the key is reserved, and only inside that method's transaction.
+     */
     @FunctionalInterface
     public interface ThrowingSupplier<T> {
         T get() throws Exception;
