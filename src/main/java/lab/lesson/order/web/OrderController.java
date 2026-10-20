@@ -62,6 +62,27 @@ public class OrderController {
         return orderService.replace(id, request);
     }
 
+    @PostMapping("/{id}/lines")
+    @ResponseStatus(HttpStatus.CREATED)
+    public OrderResponse.OrderLineResponse addLine(@PathVariable Long id,
+                                                   @RequestBody CreateOrderRequest.OrderLineRequest request) {
+        return orderService.addLine(id, request);
+    }
+
+    @PutMapping("/{id}/lines/{lineId}")
+    public OrderResponse.OrderLineResponse updateLine(@PathVariable Long id,
+                                                      @PathVariable Long lineId,
+                                                      @RequestParam Integer version,
+                                                      @RequestBody CreateOrderRequest.OrderLineRequest request) {
+        return orderService.updateLine(id, lineId, version, request);
+    }
+
+    @DeleteMapping("/{id}/lines/{lineId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteLine(@PathVariable Long id, @PathVariable Long lineId) {
+        orderService.deleteLine(id, lineId);
+    }
+
     private String currentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
