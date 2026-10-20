@@ -36,7 +36,7 @@ class OrderControllerTest {
     private OrderController orderController;
 
     @Test
-    void createDelegatesToServiceAndReturnsCreated() {
+    void createDelegatesToServiceAndReturnsCreated() throws Exception {
         CreateOrderRequest request = new CreateOrderRequest(
                 "Alice",
                 List.of(new CreateOrderRequest.OrderLineRequest("SKU-1", 2, new BigDecimal("10.00")))
