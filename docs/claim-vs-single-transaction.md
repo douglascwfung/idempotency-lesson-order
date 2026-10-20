@@ -1,6 +1,6 @@
 # Claim-then-complete vs Single Transaction
 
-This note compares the claim-then-complete design used through Lesson 11 with the single-transaction design introduced in Lesson 12. Both keep the same hash (`userId + path + rawBody`) and primary-key race handling on the key insert. Lesson 12 removes `IN_PROGRESS`, the same-content in-progress check, and the in-progress 409 path.
+This note compares the claim-then-complete design used through Lesson 11 with the single-transaction design introduced in Lesson 12. Both keep the same hash (`userId + path + rawBody`) and primary-key race handling on the key insert. Lesson 12 removes `IN_PROGRESS` and the in-progress 409 path.
 
 ## Claim-then-complete
 
@@ -14,7 +14,7 @@ The service inserts the key as `IN_PROGRESS` and commits. It then creates the Or
 
 **Recovery code required.** Yes. Stuck `IN_PROGRESS` rows must be expired, leased, or removed. Without that, a crash blocks the key forever from the client's point of view.
 
-**When this is acceptable.** Use claim-then-complete when the work after the claim cannot join the same database transaction (for example, an external payment call), or when you already operate a lease or sweeper for in-progress keys. The committed `IN_PROGRESS` row is then a deliberate lock that other requests can see. The same-content in-progress check also depends on that visible lock.
+**When this is acceptable.** Use claim-then-complete when the work after the claim cannot join the same database transaction (for example, an external payment call), or when you already operate a lease or sweeper for in-progress keys. The committed `IN_PROGRESS` row is then a deliberate lock that other requests can see. (A same-key-hash in-progress check against other keys is possible while that lock is visible; it lived briefly on tip `lesson-10` and is not part of the current teaching path.)
 
 ## Single transaction
 
@@ -26,7 +26,7 @@ The service inserts the key already as `COMPLETED`, writes the Order, and stores
 
 **Duplicate Order risk.** Low for the happy path and for a crash before commit: neither the key nor the Order becomes visible. The main residual risk is work that cannot participate in the same transaction; that work must not be placed inside `runOrReplay` as if it were atomic with the key.
 
-**Recovery code required.** Not for the single-transaction path. A crash does not leave a key row. The same-content in-progress check is not used because there is no in-progress state.
+**Recovery code required.** Not for the single-transaction path. A crash does not leave a key row. There is no in-progress state to observe or match against.
 
 **When this is acceptable.** Prefer the single transaction when the Order write and the key live in the same database and can share one commit. That is the common case for this lesson's create and add-line flows. It removes lease or sweeper logic on the happy path and makes retry after a crash safe without manual cleanup.
 
@@ -39,5 +39,5 @@ The service inserts the key already as `COMPLETED`, writes the Order, and stores
 | Concurrent same key | Primary key + reload → 409 or replay | Primary key + reload → replay or hash-mismatch 409 |
 | Duplicate Order | Possible around recovery mistakes | Avoided when work shares the transaction |
 | Recovery code | Required for stuck claims | Not required for this path |
-| Same-content in-progress check | Supported while a claim is visible | Removed |
+| Same-hash in-progress (other key) | Possible while a claim is visible (historical tip `lesson-10`) | N/A — no `IN_PROGRESS` |
 | Best fit | External side effects after claim | Same-database Order + key |

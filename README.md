@@ -64,12 +64,11 @@ Send the same create request twice. Lesson 1 deliberately creates two separate O
 | 6 | `X-User-Id` header; 409 body with running key |
 | 7 | Authenticated principal as user id |
 | 8 | Primary-key race on concurrent claim |
-| 10 | Same-content in-progress check |
 | 11 | Required idempotency key on add-line |
 | 12 | Single transaction: key + Order as `COMPLETED` |
 | 13 | Lambda work callback into `runOrReplay` |
 
-Lesson numbers stay fixed. **Reading order** places Lesson 9 (line version / single-line endpoints) right after Lesson 3 so optimistic locking on the Order root leads into the same idea on Order lines before the idempotency-key arc. The git tag `lesson-9` is historical: tag order follows when each lesson landed, which is not the same as this ideal reading order.
+Lesson numbers stay fixed. **Reading order** places Lesson 9 (line version / single-line endpoints) right after Lesson 3 so optimistic locking on the Order root leads into the same idea on Order lines before the idempotency-key arc. The git tag `lesson-9` is historical: tag order follows when each lesson landed, which is not the same as this ideal reading order. Lesson 10 (same-content in-progress check) is **retired** from the teaching materials; the git tip `lesson-10` remains as a historical snapshot only.
 
 Full narrative: [`docs/lesson-plan.md`](docs/lesson-plan.md).
 
@@ -80,7 +79,7 @@ Design notes:
 
 ## Tags and Historical Verify
 
-Each lesson ends at a git tag named `lesson-N`. Tags include **`lesson-0`** (empty starting point) through **`lesson-13`**, including **`lesson-11`**.
+Each lesson ends at a git tag named `lesson-N`. Tags include **`lesson-0`** (empty starting point) through **`lesson-13`**, including **`lesson-11`**. The tip **`lesson-10`** is a retired historical snapshot (same-content in-progress check); it is not part of the current reading path.
 
 ```bash
 git checkout lesson-N          # inspect code as of that lesson

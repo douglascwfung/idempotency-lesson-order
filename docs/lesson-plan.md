@@ -1,6 +1,6 @@
 # Lesson Plan
 
-Sections below follow **ideal reading order**, not numeric order: Lessons 1 → 2 → 3 → **9** → 4 → … → 8 → 10 → … → 13. Lesson titles and numbers are unchanged. The git tag `lesson-9` is historical — tag order records when each lesson landed and is not the same as this reading order.
+Sections below follow **ideal reading order**, not numeric order: Lessons 1 → 2 → 3 → **9** → 4 → … → 8 → 11 → 12 → 13. Lesson titles and numbers are unchanged (Lesson 10 is retired; see README). The git tag `lesson-9` is historical — tag order records when each lesson landed and is not the same as this reading order.
 
 ## Lesson 1: Basic Order Aggregate and REST Endpoints
 
@@ -472,53 +472,6 @@ The earlier tests continue to pass:
 mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerTest,OrderOptimisticLockTest,OrderServiceTransactionTest test
 ```
 
-## Lesson 10: Same-Content In-Progress Check
-
-A request that arrives with a new key but the same body while another request is still running returns 409 with the running key. This check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
-
-### Learning Objectives
-
-- Detect a new key whose hash matches an existing in-progress key.
-- Return 409 with the running key so the client can retry with it.
-- Leave a finished request alone so a deliberate second Order is still allowed.
-
-### Key Concepts
-
-The service first looks up the supplied key. When no row exists, it looks for any other row that has the same hash and status `IN_PROGRESS`. If such a row is found, the service throws `IdempotencyInProgressException` carrying that row's key. The client receives 409 and the running key. A completed key with the same hash is not matched; a second Order with the same body is still allowed after the first has finished. The front end is expected to send one request at a time; the server check is a backstop.
-
-### What You Will Build
-
-- A repository method `findFirstByRequestHashAndStatus`.
-- A check in `IdempotencyService.claimOrReplay` that runs after the key lookup and before the insert.
-- A unit test that supplies a new key and asserts the running key is returned.
-
-### Deliberate Design Decisions
-
-The check applies only while a request is in progress. A finished request does not block a later Order with the same body. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
-
-### Implementation Outline
-
-1. Add `findFirstByRequestHashAndStatus` to the repository.
-2. After the key lookup returns empty, query for an in-progress key with the same hash.
-3. If one is found, throw `IdempotencyInProgressException` with that key.
-4. Add `IdempotencySameContentTest`.
-
-### Verify Your Work
-
-Run the same-content test:
-
-```
-mvn -Dtest=IdempotencySameContentTest test
-```
-
-The method `newKeyWithSameContentInProgressReturnsRunningKey` must pass.
-
-The earlier tests continue to pass:
-
-```
-mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerTest,IdempotencyServiceRaceTest,OrderLineServiceTest test
-```
-
 ## Lesson 11: Idempotency Key on Add-Line
 
 Add-line requires an idempotency key. The `Idempotency-Key` header is mandatory (`required = true`); there is no non-idempotent add-line path. The hash includes the Order id so a key reused for a different Order is rejected. A retry with the same key and body returns the stored line instead of inserting another.
@@ -541,7 +494,7 @@ The controller builds the path as `/orders/{id}/lines`. The hash is `userId + pa
 
 ### Deliberate Design Decisions
 
-Update and delete of a line do not take a key. They are already safe when the handler checks the line version or deletes by id. Create may still accept an optional key so Lesson 1-style non-idempotent creates remain demonstrable; add-line does not. The same-content in-progress check from Lesson 10 also applies to add-line because the hash is the same mechanism.
+Update and delete of a line do not take a key. They are already safe when the handler checks the line version or deletes by id. Create may still accept an optional key so Lesson 1-style non-idempotent creates remain demonstrable; add-line does not.
 
 ### Implementation Outline
 
@@ -566,13 +519,13 @@ The following methods must pass:
 The earlier tests continue to pass:
 
 ```
-mvn -Dtest=OrderControllerIdempotencyTest,IdempotencySameContentTest,OrderLineServiceTest test
+mvn -Dtest=OrderControllerIdempotencyTest,OrderLineServiceTest test
 ```
 
 
 ## Lesson 12: Put the Key and the Order in One Transaction
 
-Lessons 4–11 use claim-then-complete: the key is claimed as `IN_PROGRESS` in its own transaction, the Order is created, then the key is completed. That pattern remains valid when the work after the claim is long-running or spans multiple systems that cannot share one database transaction. When create and add-line fit in a single database transaction with the key — as they do for this Order aggregate — a single-transaction design is a better fit. Lesson 12 inserts the key already as `COMPLETED` inside the same transaction that writes the Order, with no `IN_PROGRESS` status. See `docs/claim-vs-single-transaction.md` for the comparison.
+Lessons 4–8 and 11 use claim-then-complete: the key is claimed as `IN_PROGRESS` in its own transaction, the Order is created, then the key is completed. That pattern remains valid when the work after the claim is long-running or spans multiple systems that cannot share one database transaction. When create and add-line fit in a single database transaction with the key — as they do for this Order aggregate — a single-transaction design is a better fit. Lesson 12 inserts the key already as `COMPLETED` inside the same transaction that writes the Order, with no `IN_PROGRESS` status. See `docs/claim-vs-single-transaction.md` for the comparison.
 
 ### Learning Objectives
 
@@ -580,31 +533,31 @@ Lessons 4–11 use claim-then-complete: the key is claimed as `IN_PROGRESS` in i
 - Insert the key already as `COMPLETED` — there is no `IN_PROGRESS` status.
 - Confirm that a failure rolls both the key and the Order back so a retry can start fresh.
 - Keep the existing hash (`userId + path + rawBody`), the add-line key behaviour, and primary-key race handling.
-- Remove the same-content in-progress check and the in-progress 409 path.
+- Remove the in-progress 409 path (`IdempotencyInProgressException`) — there is no `IN_PROGRESS` status to observe.
 
 ### Key Concepts
 
-`IdempotencyService.runOrReplay` starts one transaction. When no key exists, the service inserts a row with status `COMPLETED` and flushes so the primary key rejects a concurrent insert of the same key. It then runs the Order write and stores the response body on that same row. The transaction commits with the key already `COMPLETED` and the Order present. There is never an `IN_PROGRESS` status — not committed and not used as a transient value. If the process crashes before commit, both the key insert and the Order write roll back. A retry finds no row and starts fresh. Concurrent claims of the same key still hit the primary key; the service catches `DataIntegrityViolationException`, reloads the key, and either replays the completed response or throws `IdempotencyKeyReuseException` on a hash mismatch. The hash remains `userId + path + rawBody`. Add-line continues to use the same `runOrReplay` path. The same-content in-progress check and `IdempotencyInProgressException` are removed because there is no in-progress state to observe.
+`IdempotencyService.runOrReplay` starts one transaction. When no key exists, the service inserts a row with status `COMPLETED` and flushes so the primary key rejects a concurrent insert of the same key. It then runs the Order write and stores the response body on that same row. The transaction commits with the key already `COMPLETED` and the Order present. There is never an `IN_PROGRESS` status — not committed and not used as a transient value. If the process crashes before commit, both the key insert and the Order write roll back. A retry finds no row and starts fresh. Concurrent claims of the same key still hit the primary key; the service catches `DataIntegrityViolationException`, reloads the key, and either replays the completed response or throws `IdempotencyKeyReuseException` on a hash mismatch. The hash remains `userId + path + rawBody`. Add-line continues to use the same `runOrReplay` path. `IdempotencyInProgressException` is removed because there is no in-progress state to observe.
 
 ### What You Will Build
 
 - `IdempotencyService.runOrReplay` that inserts the key as `COMPLETED`, runs the work, and stores the response inside one `@Transactional` method.
 - Updated `OrderController.create` and `OrderController.addLine` that call `runOrReplay` instead of separate `claimOrReplay` and `complete` calls.
-- Removal of `IdempotencyInProgressException`, its exception-handler mapping, and `findFirstByRequestHashAndStatus`.
+- Removal of `IdempotencyInProgressException` and its exception-handler mapping.
 - A Spring Boot test (`IdempotencySingleTransactionTest`) that verifies a successful create leaves a `COMPLETED` key with the Order, that a failure rolls both back, and that a replay does not create a second Order.
 - An updated race test that asserts a concurrent insert replays the completed response or rejects a hash mismatch.
 - A short note `docs/claim-vs-single-transaction.md` that compares claim-then-complete with the single-transaction design.
 
 ### Deliberate Design Decisions
 
-The key is inserted as `COMPLETED` before the Order write runs, still inside the same transaction. The early `saveAndFlush` lets the primary key reject a concurrent claim before a second Order is created. Because the insert and the Order share one commit, a crash never leaves a key row behind. Recovery code that deletes or leases stuck `IN_PROGRESS` rows is not required. The same-content in-progress check is dropped: without `IN_PROGRESS` there is no running key to return. Hash reuse with different content still returns 409 through `IdempotencyKeyReuseException`.
+The key is inserted as `COMPLETED` before the Order write runs, still inside the same transaction. The early `saveAndFlush` lets the primary key reject a concurrent claim before a second Order is created. Because the insert and the Order share one commit, a crash never leaves a key row behind. Recovery code that deletes or leases stuck `IN_PROGRESS` rows is not required. Without `IN_PROGRESS` there is no running key to return and no in-progress 409. Hash reuse with different content still returns 409 through `IdempotencyKeyReuseException`.
 
 ### Implementation Outline
 
 1. Replace `claimOrReplay` and `complete` with `runOrReplay` on `IdempotencyService`. On a miss, insert the key as `COMPLETED`, run the work, then store the response body on the same row.
 2. On `DataIntegrityViolationException`, reload the key and replay or reject hash mismatch. Do not throw an in-progress exception.
 3. Change `OrderController.create` and `OrderController.addLine` to call `runOrReplay`.
-4. Delete `IdempotencyInProgressException`, remove its handler method, and remove `findFirstByRequestHashAndStatus`.
+4. Delete `IdempotencyInProgressException` and remove its handler method.
 5. Add `IdempotencySingleTransactionTest` and update `IdempotencyServiceRaceTest`.
 6. Add `docs/claim-vs-single-transaction.md`.
 
