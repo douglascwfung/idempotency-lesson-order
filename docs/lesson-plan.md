@@ -162,3 +162,57 @@ The earlier tests continue to pass:
 ```
 mvn -Dtest=OrderServiceTransactionTest,OrderControllerTest test
 ```
+
+## Lesson 4: Idempotency Key Claim and Replay
+
+A client may retry the same create request. Without an idempotency key the retry creates a second Order. The key is claimed before the Order is created. A later request that carries the same key and the same content receives the stored response instead of creating another Order. An in-progress key returns 409 together with the key so the client can retry with it.
+
+### Learning Objectives
+
+- Store an idempotency key in its own table.
+- Compute a hash of the path and the raw body.
+- Claim the key before creating the Order.
+- Replay the stored response when the same key and the same hash arrive again.
+- Return 409 when the key is still in progress.
+
+### Key Concepts
+
+The client sends an `Idempotency-Key` header. The server computes a hash of the path and the raw body. On the first request the key is inserted with status `IN_PROGRESS`. After the Order is created the key is updated to `COMPLETED` and the response body is stored. A second request with the same key and the same hash finds the completed record and returns the stored body. A second request that arrives while the first is still running finds status `IN_PROGRESS` and throws `IdempotencyInProgressException`, which maps to 409. The hash includes the path and the raw body. Later lessons will add the user id to the hash. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+
+### What You Will Build
+
+- The `idempotency_keys` table and the `IdempotencyKey` entity under `lab.lesson.idem`.
+- `IdempotencyService` with `claimOrReplay` and `complete`.
+- Integration of the key into `OrderController.create`.
+- Unit tests that verify claim-and-complete and replay.
+
+### Deliberate Design Decisions
+
+The key lives in its own table, not on the Order. The front end is expected to send one request at a time; the server check is a backstop. A 409 for an in-progress request returns the running key so the client can retry with it. No user id is included in the hash yet. Optimistic locking and the transaction boundary remain unchanged.
+
+### Implementation Outline
+
+1. Add the Flyway migration that creates `idempotency_keys`.
+2. Add the `IdempotencyKey` entity and repository.
+3. Add `IdempotencyService.claimOrReplay` and `complete`.
+4. Change `OrderController.create` to accept the `Idempotency-Key` header and to call the service.
+5. Add `OrderControllerIdempotencyTest`.
+
+### Verify Your Work
+
+Run the new controller tests:
+
+```
+mvn -Dtest=OrderControllerIdempotencyTest test
+```
+
+The following methods must pass:
+
+- `createWithNewKeyClaimsAndCompletes`
+- `createWithCompletedKeyReplaysStoredResponse`
+
+The earlier tests continue to pass:
+
+```
+mvn -Dtest=OrderOptimisticLockTest,OrderServiceTransactionTest,OrderControllerTest test
+```
