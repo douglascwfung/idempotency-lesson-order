@@ -64,9 +64,27 @@ public class OrderController {
 
     @PostMapping("/{id}/lines")
     @ResponseStatus(HttpStatus.CREATED)
-    public OrderResponse.OrderLineResponse addLine(@PathVariable Long id,
-                                                   @RequestBody CreateOrderRequest.OrderLineRequest request) {
-        return orderService.addLine(id, request);
+    public OrderResponse.OrderLineResponse addLine(
+            @PathVariable Long id,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody CreateOrderRequest.OrderLineRequest request) throws Exception {
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return orderService.addLine(id, request);
+        }
+
+        String userId = currentUserId();
+        String path = "/orders/" + id + "/lines";
+        String rawBody = objectMapper.writeValueAsString(request);
+        Optional<IdempotencyKey> replay = idempotencyService.claimOrReplay(idempotencyKey, userId, path, rawBody);
+
+        if (replay.isPresent()) {
+            return objectMapper.readValue(replay.get().getResponseBody(), OrderResponse.OrderLineResponse.class);
+        }
+
+        OrderResponse.OrderLineResponse response = orderService.addLine(id, request);
+        idempotencyService.complete(idempotencyKey, 201, objectMapper.writeValueAsString(response));
+        return response;
     }
 
     @PutMapping("/{id}/lines/{lineId}")
