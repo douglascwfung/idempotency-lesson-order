@@ -1,5 +1,6 @@
 package lab.lesson.order.service;
 
+import jakarta.persistence.EntityManager;
 import lab.lesson.order.domain.Order;
 import lab.lesson.order.repository.OrderRepository;
 import lab.lesson.order.web.dto.CreateOrderRequest;
@@ -23,6 +24,9 @@ class OrderOptimisticLockTest {
     @Autowired
     private OrderRepository orderRepository;
 
+    @Autowired
+    private EntityManager entityManager;
+
     @Test
     @Transactional
     void concurrentReplaceThrowsOptimisticLockingFailure() {
@@ -34,6 +38,8 @@ class OrderOptimisticLockTest {
 
         Order first = orderRepository.findById(created.id()).orElseThrow();
         Order second = orderRepository.findById(created.id()).orElseThrow();
+
+        entityManager.detach(second);
 
         first.setCustomerName("First update");
         orderRepository.saveAndFlush(first);

@@ -135,7 +135,7 @@ The `@Version` annotation marks the field that Hibernate uses for optimistic loc
 
 - A `version` field on the `Order` entity annotated with `@Version`.
 - A Flyway migration `V2__add_order_version.sql` that adds the column.
-- A Spring Boot test (`OrderOptimisticLockTest`) that loads the same Order twice, updates the first copy, and asserts that saving the second copy throws `OptimisticLockingFailureException`.
+- A Spring Boot test (`OrderOptimisticLockTest`) that loads the same Order twice, detaches the second instance, updates the first copy, and asserts that saving the second copy throws `OptimisticLockingFailureException`.
 
 ### Deliberate Design Decisions
 
@@ -145,7 +145,7 @@ Optimistic locking is chosen over pessimistic locking. The expected contention i
 
 1. Add the `version` field to `Order` and annotate it with `@Version`.
 2. Add the Flyway migration that creates the column with a default of 0.
-3. Add `OrderOptimisticLockTest` that demonstrates the conflict.
+3. Add `OrderOptimisticLockTest` that loads the Order twice, detaches the second instance so it carries the old version, updates the first, and asserts that saving the second throws `OptimisticLockingFailureException`.
 
 ### Verify Your Work
 
