@@ -52,7 +52,7 @@ class OrderControllerIdempotencyTest {
     }
 
     @Test
-    void createWithNewKeyClaimsAndCompletes() throws Exception {
+    void createWithNewKeyRunOrReplayCompletes() throws Exception {
         CreateOrderRequest request = new CreateOrderRequest("Alice", List.of(
                 new CreateOrderRequest.OrderLineRequest("SKU-1", 1, new BigDecimal("10.00"))
         ));

@@ -49,7 +49,7 @@ class OrderControllerAddLineIdempotencyTest {
     }
 
     @Test
-    void addLineWithNewKeyClaimsAndCompletes() throws Exception {
+    void addLineWithNewKeyRunOrReplayCompletes() throws Exception {
         CreateOrderRequest.OrderLineRequest request =
                 new CreateOrderRequest.OrderLineRequest("SKU-1", 1, new BigDecimal("10.00"));
         OrderResponse.OrderLineResponse response =

@@ -51,10 +51,38 @@ curl -X PUT http://localhost:8080/orders/1 \
 
 Send the same create request twice. Lesson 1 deliberately creates two separate Orders.
 
-## Lesson Plan
+## Lesson Map (1 → 13)
 
-Follow the lessons in `docs/lesson-plan.md`.
+| Lesson | Focus |
+|--------|--------|
+| 1 | Order aggregate + REST create/get/replace (duplicates allowed) |
+| 2 | `@Transactional` service boundary |
+| 3 | Optimistic locking with `@Version` on Order |
+| 4 | Idempotency key claim and replay on create |
+| 5 | User id in the hash; key-reuse rejection |
+| 6 | `X-User-Id` header; 409 body with running key |
+| 7 | Authenticated principal as user id |
+| 8 | Primary-key race on concurrent claim |
+| 9 | Line `@Version` and single-line endpoints |
+| 10 | Same-content in-progress check |
+| 11 | Required idempotency key on add-line |
+| 12 | Single transaction: key + Order as `COMPLETED` |
+| 13 | Lambda work callback into `runOrReplay` |
 
-Each lesson ends at a git tag named `lesson-N`. Use `git diff lesson-N lesson-N+1` to see the changes introduced by a lesson.
+Full narrative: [`docs/lesson-plan.md`](docs/lesson-plan.md).
 
-Lesson 0 is the empty starting point. Lesson 1 introduces the Order aggregate and REST endpoints that deliberately allow duplicate Orders on repeated creates.
+Design notes:
+
+- [`docs/claim-vs-single-transaction.md`](docs/claim-vs-single-transaction.md) — claim-then-complete vs single-transaction (Lesson 12)
+- [`docs/why-lambda-for-idempotency.md`](docs/why-lambda-for-idempotency.md) — why domain work is a lambda (Lesson 13)
+
+## Tags and Historical Verify
+
+Each lesson ends at a git tag named `lesson-N`. Tags include **`lesson-0`** (empty starting point) through **`lesson-13`**, including **`lesson-11`**.
+
+```bash
+git checkout lesson-N          # inspect code as of that lesson
+git diff lesson-N lesson-N+1   # see what a lesson introduced
+```
+
+**Historical Verify:** the Verify sections in `docs/lesson-plan.md` on `main` may name HEAD test methods (for example `*RunOrReplay*`). To run the Verify commands against the code and tests as written for that lesson, check out the matching tag first (`git checkout lesson-N`), then run the `mvn -Dtest=...` commands from that lesson's section. Behaviour that landed on `main` after a tag (for example making add-line's `Idempotency-Key` required) is not rewritten into earlier tags; look for a tip tag on `main` when noted in the commit history.

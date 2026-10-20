@@ -208,7 +208,7 @@ mvn -Dtest=OrderControllerIdempotencyTest test
 
 The following methods must pass:
 
-- `createWithNewKeyClaimsAndCompletes`
+- `createWithNewKeyRunOrReplayCompletes`
 - `createWithCompletedKeyReplaysStoredResponse`
 
 The earlier tests continue to pass:
@@ -259,7 +259,7 @@ mvn -Dtest=OrderControllerIdempotencyTest test
 
 The following methods must pass:
 
-- `createWithNewKeyClaimsAndCompletes`
+- `createWithNewKeyRunOrReplayCompletes`
 - `createWithCompletedKeyReplaysStoredResponse`
 - `createWithSameKeyAndDifferentContentThrows`
 
@@ -286,7 +286,7 @@ The controller reads the user id from the `X-User-Id` header. When the header is
 ### What You Will Build
 
 - An `X-User-Id` header parameter on `OrderController.create`.
-- `IdempotencyConflictResponse` and `IdempotencyExceptionHandler` under `lab.lesson.common`.
+- `IdempotencyConflictResponse` under `lab.lesson.idem` and `IdempotencyExceptionHandler` under `lab.lesson.common`.
 - A unit test that verifies an in-progress key throws with the key present.
 
 ### Deliberate Design Decisions
@@ -310,7 +310,7 @@ mvn -Dtest=OrderControllerIdempotencyTest test
 
 The following methods must pass:
 
-- `createWithNewKeyClaimsAndCompletes`
+- `createWithNewKeyRunOrReplayCompletes`
 - `createWithCompletedKeyReplaysStoredResponse`
 - `createWithSameKeyAndDifferentContentThrows`
 - `createWithInProgressKeyThrowsWithKey`
@@ -519,31 +519,31 @@ mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerTest,IdempotencyService
 
 ## Lesson 11: Idempotency Key on Add-Line
 
-Add-line requires an idempotency key. The hash includes the Order id so a key reused for a different Order is rejected. A retry with the same key and body returns the stored line instead of inserting another.
+Add-line requires an idempotency key. The `Idempotency-Key` header is mandatory (`required = true`); there is no non-idempotent add-line path. The hash includes the Order id so a key reused for a different Order is rejected. A retry with the same key and body returns the stored line instead of inserting another.
 
 ### Learning Objectives
 
-- Require an `Idempotency-Key` on `POST /orders/{id}/lines`.
+- Require an `Idempotency-Key` on `POST /orders/{id}/lines` (`@RequestHeader(..., required = true)`).
 - Include the Order id in the path that is hashed.
 - Replay a completed add-line or return 409 if it is still in progress.
 
 ### Key Concepts
 
-The controller builds the path as `/orders/{id}/lines`. The hash is `userId + path + rawBody`. Because the path contains the Order id, the same key and body applied to a different Order produces a different hash and is rejected as key reuse. The claim, replay, and in-progress rules are the same as for create. The front end is expected to send one request at a time; the server check is a backstop.
+The controller builds the path as `/orders/{id}/lines`. The hash is `userId + path + rawBody`. Because the path contains the Order id, the same key and body applied to a different Order produces a different hash and is rejected as key reuse. Missing or blank keys are rejected by Spring before the handler runs — unlike create, add-line has no bypass that calls the service directly. The claim, replay, and in-progress rules are otherwise the same as for create. The front end is expected to send one request at a time; the server check is a backstop.
 
 ### What You Will Build
 
-- An `Idempotency-Key` header on `OrderController.addLine`.
+- A required `Idempotency-Key` header on `OrderController.addLine` (`required = true`).
 - A path that includes the Order id.
-- A unit test that covers claim-and-complete and replay for add-line.
+- A unit test that covers run-or-replay (claim-and-complete at this lesson) and replay for add-line.
 
 ### Deliberate Design Decisions
 
-Update and delete of a line do not take a key. They are already safe when the handler checks the line version or deletes by id. The same-content in-progress check from Lesson 10 also applies to add-line because the hash is the same mechanism.
+Update and delete of a line do not take a key. They are already safe when the handler checks the line version or deletes by id. Create may still accept an optional key so Lesson 1-style non-idempotent creates remain demonstrable; add-line does not. The same-content in-progress check from Lesson 10 also applies to add-line because the hash is the same mechanism.
 
 ### Implementation Outline
 
-1. Add the `Idempotency-Key` header to `addLine`.
+1. Add the `Idempotency-Key` header to `addLine` with `required = true` (no blank-key bypass).
 2. Build the path as `/orders/{id}/lines` and pass it to `claimOrReplay`.
 3. On replay, deserialize the stored body as `OrderLineResponse`.
 4. Add `OrderControllerAddLineIdempotencyTest`.
@@ -558,7 +558,7 @@ mvn -Dtest=OrderControllerAddLineIdempotencyTest test
 
 The following methods must pass:
 
-- `addLineWithNewKeyClaimsAndCompletes`
+- `addLineWithNewKeyRunOrReplayCompletes`
 - `addLineWithCompletedKeyReplays`
 
 The earlier tests continue to pass:

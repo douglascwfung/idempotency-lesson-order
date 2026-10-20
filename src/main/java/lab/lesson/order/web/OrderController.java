@@ -64,17 +64,14 @@ public class OrderController {
     @ResponseStatus(HttpStatus.CREATED)
     public OrderResponse.OrderLineResponse addLine(
             @PathVariable Long id,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey,
             @RequestBody CreateOrderRequest.OrderLineRequest request) throws Exception {
-
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            return orderService.addLine(id, request);
-        }
 
         String userId = currentUserId();
         String path = "/orders/" + id + "/lines";
         String rawBody = objectMapper.writeValueAsString(request);
         // Pass add-line as a lambda; same key path as create, different domain work.
+        // Idempotency-Key is required (no non-idempotent path).
         return idempotencyService.runOrReplay(
                 idempotencyKey,
                 userId,
