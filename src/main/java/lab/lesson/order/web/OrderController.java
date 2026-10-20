@@ -31,14 +31,18 @@ public class OrderController {
     @ResponseStatus(HttpStatus.CREATED)
     public OrderResponse create(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestBody CreateOrderRequest request) throws Exception {
 
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return orderService.create(request);
         }
 
+        if (userId == null || userId.isBlank()) {
+            userId = "anonymous";
+        }
+
         String rawBody = objectMapper.writeValueAsString(request);
-        String userId = "user-1";
         Optional<IdempotencyKey> replay = idempotencyService.claimOrReplay(idempotencyKey, userId, "/orders", rawBody);
 
         if (replay.isPresent()) {
