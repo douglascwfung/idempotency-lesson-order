@@ -516,3 +516,53 @@ The earlier tests continue to pass:
 ```
 mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerTest,IdempotencyServiceRaceTest,OrderLineServiceTest test
 ```
+
+## Lesson 11: Idempotency Key on Add-Line
+
+Add-line requires an idempotency key. The hash includes the Order id so a key reused for a different Order is rejected. A retry with the same key and body returns the stored line instead of inserting another.
+
+### Learning Objectives
+
+- Require an `Idempotency-Key` on `POST /orders/{id}/lines`.
+- Include the Order id in the path that is hashed.
+- Replay a completed add-line or return 409 if it is still in progress.
+
+### Key Concepts
+
+The controller builds the path as `/orders/{id}/lines`. The hash is `userId + path + rawBody`. Because the path contains the Order id, the same key and body applied to a different Order produces a different hash and is rejected as key reuse. The claim, replay, and in-progress rules are the same as for create. The front end is expected to send one request at a time; the server check is a backstop.
+
+### What You Will Build
+
+- An `Idempotency-Key` header on `OrderController.addLine`.
+- A path that includes the Order id.
+- A unit test that covers claim-and-complete and replay for add-line.
+
+### Deliberate Design Decisions
+
+Update and delete of a line do not take a key. They are already safe when the handler checks the line version or deletes by id. The same-content in-progress check from Lesson 10 also applies to add-line because the hash is the same mechanism.
+
+### Implementation Outline
+
+1. Add the `Idempotency-Key` header to `addLine`.
+2. Build the path as `/orders/{id}/lines` and pass it to `claimOrReplay`.
+3. On replay, deserialize the stored body as `OrderLineResponse`.
+4. Add `OrderControllerAddLineIdempotencyTest`.
+
+### Verify Your Work
+
+Run the add-line idempotency tests:
+
+```
+mvn -Dtest=OrderControllerAddLineIdempotencyTest test
+```
+
+The following methods must pass:
+
+- `addLineWithNewKeyClaimsAndCompletes`
+- `addLineWithCompletedKeyReplays`
+
+The earlier tests continue to pass:
+
+```
+mvn -Dtest=OrderControllerIdempotencyTest,IdempotencySameContentTest,OrderLineServiceTest test
+```
