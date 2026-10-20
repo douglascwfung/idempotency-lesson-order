@@ -12,6 +12,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -47,11 +49,13 @@ class OrderControllerIdempotencyTest {
         OrderResponse response = new OrderResponse(1L, "Alice", List.of());
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{\"customerName\":\"Alice\"}");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("user-1", null));
         when(idempotencyService.claimOrReplay(eq("key-1"), eq("user-1"), eq("/orders"), any())).thenReturn(Optional.empty());
         when(orderService.create(request)).thenReturn(response);
         when(objectMapper.writeValueAsString(response)).thenReturn("{\"id\":1}");
 
-        OrderResponse result = orderController.create("key-1", "user-1", request);
+        OrderResponse result = orderController.create("key-1", request);
 
         assertThat(result).isEqualTo(response);
         verify(idempotencyService).complete(eq("key-1"), eq(201), any());
@@ -65,10 +69,12 @@ class OrderControllerIdempotencyTest {
         key.setResponseBody("{\"id\":5}");
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{}");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("user-1", null));
         when(idempotencyService.claimOrReplay(eq("key-2"), eq("user-1"), eq("/orders"), any())).thenReturn(Optional.of(key));
         when(objectMapper.readValue(eq("{\"id\":5}"), eq(OrderResponse.class))).thenReturn(stored);
 
-        OrderResponse result = orderController.create("key-2", "user-1", request);
+        OrderResponse result = orderController.create("key-2", request);
 
         assertThat(result).isEqualTo(stored);
         verify(orderService, org.mockito.Mockito.never()).create(any());
@@ -79,10 +85,12 @@ class OrderControllerIdempotencyTest {
         CreateOrderRequest request = new CreateOrderRequest("Bob", List.of());
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{\"customerName\":\"Bob\"}");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("user-1", null));
         when(idempotencyService.claimOrReplay(eq("key-3"), eq("user-1"), eq("/orders"), any()))
                 .thenThrow(new IdempotencyKeyReuseException("key-3"));
 
-        assertThatThrownBy(() -> orderController.create("key-3", "user-1", request))
+        assertThatThrownBy(() -> orderController.create("key-3", request))
                 .isInstanceOf(IdempotencyKeyReuseException.class);
     }
 
@@ -91,10 +99,12 @@ class OrderControllerIdempotencyTest {
         CreateOrderRequest request = new CreateOrderRequest("Alice", List.of());
 
         when(objectMapper.writeValueAsString(request)).thenReturn("{}");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("user-1", null));
         when(idempotencyService.claimOrReplay(eq("key-4"), eq("user-1"), eq("/orders"), any()))
                 .thenThrow(new lab.lesson.idem.IdempotencyInProgressException("key-4"));
 
-        assertThatThrownBy(() -> orderController.create("key-4", "user-1", request))
+        assertThatThrownBy(() -> orderController.create("key-4", request))
                 .isInstanceOf(lab.lesson.idem.IdempotencyInProgressException.class)
                 .hasFieldOrPropertyWithValue("key", "key-4");
     }
