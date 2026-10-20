@@ -29,7 +29,7 @@ class IdempotencyServiceRaceTest {
         IdempotencyKey raced = new IdempotencyKey();
         raced.setKeyValue("key-1");
         raced.setRequestHash(serviceHash());
-        raced.setStatus("COMPLETED");
+        raced.setStatus(IdempotencyKeyStatus.COMPLETED);
         raced.setResponseStatus(201);
         raced.setResponseBody("{\"id\":9}");
 
@@ -62,7 +62,7 @@ class IdempotencyServiceRaceTest {
         IdempotencyKey raced = new IdempotencyKey();
         raced.setKeyValue("key-1");
         raced.setRequestHash("different-hash");
-        raced.setStatus("COMPLETED");
+        raced.setStatus(IdempotencyKeyStatus.COMPLETED);
         raced.setResponseBody("{}");
 
         when(repository.findById("key-1"))

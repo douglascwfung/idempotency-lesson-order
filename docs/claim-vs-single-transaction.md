@@ -18,7 +18,7 @@ The service inserts the key as `IN_PROGRESS` and commits. It then creates the Or
 
 ## Single transaction
 
-The service inserts the key already as `COMPLETED`, writes the Order, and stores the response body inside one transaction. There is no `IN_PROGRESS` status at any point. Callers use `runOrReplay` so the controller does not open a separate claim transaction.
+The service inserts the key already as `COMPLETED`, writes the Order, and stores the response body inside one transaction. There is no `IN_PROGRESS` status at any point. Callers use `runOrReplay` so the controller does not open a separate claim transaction. On HEAD, `IdempotencyKeyStatus.COMPLETED` and Flyway `V5` (`CHECK (status = 'COMPLETED')`) enforce that rule at the type and schema layers.
 
 **Crash after key insert.** There is no committed key insert to crash after in isolation. An uncommitted key and an uncommitted Order roll back together. A retry finds no row and starts fresh.
 

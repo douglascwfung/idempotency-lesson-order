@@ -52,7 +52,7 @@ class IdempotencySingleTransactionTest {
                 body -> objectMapper.readValue(body, OrderResponse.class));
 
         IdempotencyKey key = keyRepository.findById("key-st-1").orElseThrow();
-        assertThat(key.getStatus()).isEqualTo("COMPLETED");
+        assertThat(key.getStatus()).isEqualTo(IdempotencyKeyStatus.COMPLETED);
         assertThat(key.getResponseStatus()).isEqualTo(201);
         assertThat(key.getResponseBody()).isNotBlank();
         assertThat(orderRepository.findById(response.id())).isPresent();

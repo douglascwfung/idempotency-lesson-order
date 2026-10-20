@@ -23,11 +23,13 @@ public class IdempotencyService {
      * Key method for one idempotent write. This method owns the transaction and the
      * key lifecycle. Callers supply only the domain work as a lambda ({@code work}).
      *
-     * <p>Inserts the key already as COMPLETED, runs {@code work} inside the open
-     * transaction, and stores the response body. There is no IN_PROGRESS status.
-     * A crash rolls the key and the domain rows back together. A concurrent insert
-     * of the same key hits the primary key; the service reloads and either replays
-     * the completed response or rejects a hash mismatch.
+     * <p>Inserts the key already as {@link IdempotencyKeyStatus#COMPLETED}, runs
+     * {@code work} inside the open transaction, and stores the response body. There
+     * is no IN_PROGRESS status. The enum and Flyway {@code V5} CHECK enforce
+     * COMPLETED-only at the application and database layers. A crash rolls the key
+     * and the domain rows back together. A concurrent insert of the same key hits
+     * the primary key; the service reloads and either replays the completed response
+     * or rejects a hash mismatch.
      *
      * <p>The key method does not know whether {@code work} creates an Order or adds
      * a line. Controllers pass that action as a lambda so new endpoints reuse this
@@ -52,7 +54,7 @@ public class IdempotencyService {
         IdempotencyKey created = new IdempotencyKey();
         created.setKeyValue(key);
         created.setRequestHash(hash);
-        created.setStatus("COMPLETED");
+        created.setStatus(IdempotencyKeyStatus.COMPLETED);
 
         try {
             repository.saveAndFlush(created);

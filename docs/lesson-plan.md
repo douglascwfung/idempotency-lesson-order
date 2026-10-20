@@ -552,6 +552,8 @@ Lessons 4–8 and 11 use claim-then-complete: the key is claimed as `IN_PROGRESS
 
 The key is inserted as `COMPLETED` before the Order write runs, still inside the same transaction. The early `saveAndFlush` lets the primary key reject a concurrent claim before a second Order is created. Because the insert and the Order share one commit, a crash never leaves a key row behind. Recovery code that deletes or leases stuck `IN_PROGRESS` rows is not required. Without `IN_PROGRESS` there is no running key to return and no in-progress 409. Hash reuse with different content still returns 409 through `IdempotencyKeyReuseException`.
 
+**HEAD enforcement (post-tag):** on `main`, `IdempotencyKeyStatus` is a COMPLETED-only enum used by `IdempotencyService` and the entity, and Flyway `V5` adds a CHECK that `status = 'COMPLETED'`. Teaching tags through `lesson-13` stay historical and do not rewrite earlier claim-then-complete code.
+
 ### Implementation Outline
 
 1. Replace `claimOrReplay` and `complete` with `runOrReplay` on `IdempotencyService`. On a miss, insert the key as `COMPLETED`, run the work, then store the response body on the same row.
@@ -617,7 +619,7 @@ Lesson 12 put the key insert and the Order write in one transaction, with the ke
 
 ### Deliberate Design Decisions
 
-Lesson 12 already achieved one transaction without teaching the lambda. Lesson 13 does not change the `COMPLETED`-only insert or the race handling. It makes the callback the extension point: mixed add+update work in one request, different exception policies inside the work, and new idempotent endpoints can each pass a different lambda without copying claim/replay/hash code. The tradeoff is that the call site is slightly harder to read at first — the Order write is no longer a direct line in the key method. That cost is accepted so the key method stays generic.
+Lesson 12 already achieved one transaction without teaching the lambda. Lesson 13 does not change the `COMPLETED`-only insert or the race handling. It makes the callback the extension point: mixed add+update work in one request, different exception policies inside the work, and new idempotent endpoints can each pass a different lambda without copying claim/replay/hash code. The tradeoff is that the call site is slightly harder to read at first — the Order write is no longer a direct line in the key method. That cost is accepted so the key method stays generic. The COMPLETED-only enum and `V5` CHECK on HEAD document and enforce the Lesson 12 status rule without changing the lambda shape.
 
 ### Implementation Outline
 
