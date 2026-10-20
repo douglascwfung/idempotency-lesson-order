@@ -51,23 +51,25 @@ curl -X PUT http://localhost:8080/orders/1 \
 
 Send the same create request twice. Lesson 1 deliberately creates two separate Orders.
 
-## Lesson Map (1 → 13)
+## Lesson Map (reading order)
 
 | Lesson | Focus |
 |--------|--------|
 | 1 | Order aggregate + REST create/get/replace (duplicates allowed) |
 | 2 | `@Transactional` service boundary |
 | 3 | Optimistic locking with `@Version` on Order |
+| 9 | Line `@Version` and single-line endpoints |
 | 4 | Idempotency key claim and replay on create |
 | 5 | User id in the hash; key-reuse rejection |
 | 6 | `X-User-Id` header; 409 body with running key |
 | 7 | Authenticated principal as user id |
 | 8 | Primary-key race on concurrent claim |
-| 9 | Line `@Version` and single-line endpoints |
 | 10 | Same-content in-progress check |
 | 11 | Required idempotency key on add-line |
 | 12 | Single transaction: key + Order as `COMPLETED` |
 | 13 | Lambda work callback into `runOrReplay` |
+
+Lesson numbers stay fixed. **Reading order** places Lesson 9 (line version / single-line endpoints) right after Lesson 3 so optimistic locking on the Order root leads into the same idea on Order lines before the idempotency-key arc. The git tag `lesson-9` is historical: tag order follows when each lesson landed, which is not the same as this ideal reading order.
 
 Full narrative: [`docs/lesson-plan.md`](docs/lesson-plan.md).
 
