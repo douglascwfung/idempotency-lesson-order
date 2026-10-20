@@ -27,7 +27,7 @@ An Order is the root of the aggregate. An OrderDetail exists only as part of an 
 
 ### Deliberate Design Decisions
 
-The create operation always inserts a new Order. Repeated identical requests produce duplicate Orders. This behaviour is intentional for Lesson 1. Later lessons will introduce an idempotency key to prevent duplicates. No `@Transactional` annotation appears yet. No version column appears yet. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+The create operation always inserts a new Order. Repeated identical requests produce duplicate Orders. This behaviour is intentional for Lesson 1. Later lessons will introduce an idempotency key to prevent duplicates. No `@Transactional` annotation appears yet. No version column appears yet.
 
 ### Implementation Outline
 
@@ -177,7 +177,7 @@ A client may retry the same create request. Without an idempotency key the retry
 
 ### Key Concepts
 
-The client sends an `Idempotency-Key` header. The server computes a hash of the path and the raw body. On the first request the key is inserted with status `IN_PROGRESS`. After the Order is created the key is updated to `COMPLETED` and the response body is stored. A second request with the same key and the same hash finds the completed record and returns the stored body. A second request that arrives while the first is still running finds status `IN_PROGRESS` and throws `IdempotencyInProgressException`, which maps to 409. The hash includes the path and the raw body. Later lessons will add the user id to the hash. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+The client sends an `Idempotency-Key` header. The server computes a hash of the path and the raw body. On the first request the key is inserted with status `IN_PROGRESS`. After the Order is created the key is updated to `COMPLETED` and the response body is stored. A second request with the same key and the same hash finds the completed record and returns the stored body. A second request that arrives while the first is still running finds status `IN_PROGRESS` and throws `IdempotencyInProgressException`, which maps to 409. The hash includes the path and the raw body. Later lessons will add the user id to the hash.
 
 ### What You Will Build
 
@@ -229,7 +229,7 @@ The hash must include the user id. A key that belongs to one user and one body m
 
 ### Key Concepts
 
-The hash is now `userId + path + rawBody`. Two requests that share a key but differ in user or body produce different hashes. When a completed or in-progress key is found and the computed hash does not match the stored hash, `IdempotencyKeyReuseException` is thrown. The exception maps to HTTP 409. The front end is expected to send one request at a time; the server check is a backstop. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+The hash is now `userId + path + rawBody`. Two requests that share a key but differ in user or body produce different hashes. When a completed or in-progress key is found and the computed hash does not match the stored hash, `IdempotencyKeyReuseException` is thrown. The exception maps to HTTP 409. The front end is expected to send one request at a time; the server check is a backstop.
 
 ### What You Will Build
 
@@ -344,7 +344,7 @@ The controller calls `SecurityContextHolder.getContext().getAuthentication()`. W
 
 ### Deliberate Design Decisions
 
-Spring Security is introduced only to supply the principal. No authentication filter or password encoder is configured. All endpoints remain open. The user id is taken from the security context so that a later lesson can add real authentication without changing the hash. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+Spring Security is introduced only to supply the principal. No authentication filter or password encoder is configured. All endpoints remain open. The user id is taken from the security context so that a later lesson can add real authentication without changing the hash.
 
 ### Implementation Outline
 
@@ -395,7 +395,7 @@ Without the try/catch, the second request receives an HTTP 500. The `DataIntegri
 
 ### Deliberate Design Decisions
 
-No additional unique constraint is added. The primary key is sufficient. The race is handled by catching the constraint violation rather than by a lock. The same-content in-progress check is appropriate for Orders because a user intends to place one Order. It is not appropriate for domains that allow duplicate content (for example, a machine-status log).
+No additional unique constraint is added. The primary key is sufficient. The race is handled by catching the constraint violation rather than by a lock.
 
 ### Implementation Outline
 
@@ -570,7 +570,7 @@ mvn -Dtest=OrderControllerIdempotencyTest,IdempotencySameContentTest,OrderLineSe
 
 ## Lesson 12: Put the Key and the Order in One Transaction
 
-Lessons 4–11 claim the idempotency key as `IN_PROGRESS` in its own transaction, then create the Order, then complete the key. A crash after the claim leaves a committed `IN_PROGRESS` row and no Order. Lesson 12 removes `IN_PROGRESS` entirely. The key is inserted only inside the same transaction that creates the Order, and it is inserted already as `COMPLETED`.
+Lessons 4–11 use claim-then-complete: the key is claimed as `IN_PROGRESS` in its own transaction, the Order is created, then the key is completed. That pattern remains valid when the work after the claim is long-running or spans multiple systems that cannot share one database transaction. When create and add-line fit in a single database transaction with the key — as they do for this Order aggregate — a single-transaction design is a better fit. Lesson 12 inserts the key already as `COMPLETED` inside the same transaction that writes the Order, with no `IN_PROGRESS` status. See `docs/claim-vs-single-transaction.md` for the comparison.
 
 ### Learning Objectives
 
@@ -591,6 +591,7 @@ Lessons 4–11 claim the idempotency key as `IN_PROGRESS` in its own transaction
 - Removal of `IdempotencyInProgressException`, its exception-handler mapping, and `findFirstByRequestHashAndStatus`.
 - A Spring Boot test (`IdempotencySingleTransactionTest`) that verifies a successful create leaves a `COMPLETED` key with the Order, that a failure rolls both back, and that a replay does not create a second Order.
 - An updated race test that asserts a concurrent insert replays the completed response or rejects a hash mismatch.
+- A short note `docs/claim-vs-single-transaction.md` that compares claim-then-complete with the single-transaction design.
 
 ### Deliberate Design Decisions
 
@@ -603,6 +604,7 @@ The key is inserted as `COMPLETED` before the Order write runs, still inside the
 3. Change `OrderController.create` and `OrderController.addLine` to call `runOrReplay`.
 4. Delete `IdempotencyInProgressException`, remove its handler method, and remove `findFirstByRequestHashAndStatus`.
 5. Add `IdempotencySingleTransactionTest` and update `IdempotencyServiceRaceTest`.
+6. Add `docs/claim-vs-single-transaction.md`.
 
 ### Verify Your Work
 
