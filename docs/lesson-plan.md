@@ -383,6 +383,10 @@ The `key_value` column is already the primary key, so a second insert of the sam
 
 The first request inserts the key with status `IN_PROGRESS`. A concurrent request that also finds no row attempts the same insert. The database rejects the second insert because of the primary key. The service catches the violation, loads the row that the first request inserted, and continues with the normal rules: hash mismatch throws `IdempotencyKeyReuseException`, `IN_PROGRESS` throws `IdempotencyInProgressException`, and `COMPLETED` returns the stored response. The front end is expected to send one request at a time; the server check is a backstop.
 
+### What the Client Sees Without This Change
+
+Without the try/catch, the second request receives an HTTP 500. The `DataIntegrityViolationException` leaves the service uncaught and becomes a server error. The client does not receive a 409 with the running key, and it does not receive the stored response. The client cannot distinguish a concurrent retry from a true server failure, and it has no key to retry with.
+
 ### What You Will Build
 
 - A try/catch around `saveAndFlush` in `IdempotencyService.claimOrReplay`.
