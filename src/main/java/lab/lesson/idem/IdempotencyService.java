@@ -35,6 +35,11 @@ public class IdempotencyService {
             return Optional.of(found);
         }
 
+        Optional<IdempotencyKey> sameContent = repository.findFirstByRequestHashAndStatus(hash, "IN_PROGRESS");
+        if (sameContent.isPresent()) {
+            throw new IdempotencyInProgressException(sameContent.get().getKeyValue());
+        }
+
         IdempotencyKey claim = new IdempotencyKey();
         claim.setKeyValue(key);
         claim.setRequestHash(hash);
