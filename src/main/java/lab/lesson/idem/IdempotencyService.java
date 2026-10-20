@@ -19,53 +19,55 @@ public class IdempotencyService {
         this.repository = repository;
     }
 
+    /**
+     * Inserts the key already as COMPLETED, runs the Order write, and stores the response
+     * in one transaction. There is no IN_PROGRESS status. A crash rolls the key and the
+     * Order back together. A concurrent insert of the same key hits the primary key; the
+     * service reloads and either replays the completed response or rejects a hash mismatch.
+     */
     @Transactional
-    public Optional<IdempotencyKey> claimOrReplay(String key, String userId, String path, String rawBody) {
+    public <T> T runOrReplay(String key,
+                             String userId,
+                             String path,
+                             String rawBody,
+                             int responseStatus,
+                             ThrowingSupplier<T> work,
+                             ThrowingFunction<T, String> serializer,
+                             ThrowingFunction<String, T> deserializer) throws Exception {
         String hash = hash(userId, path, rawBody);
         Optional<IdempotencyKey> existing = repository.findById(key);
 
         if (existing.isPresent()) {
-            IdempotencyKey found = existing.get();
-            if (!found.getRequestHash().equals(hash)) {
-                throw new IdempotencyKeyReuseException(key);
-            }
-            if ("IN_PROGRESS".equals(found.getStatus())) {
-                throw new IdempotencyInProgressException(key);
-            }
-            return Optional.of(found);
+            return replayOrReject(existing.get(), key, hash, deserializer);
         }
 
-        Optional<IdempotencyKey> sameContent = repository.findFirstByRequestHashAndStatus(hash, "IN_PROGRESS");
-        if (sameContent.isPresent()) {
-            throw new IdempotencyInProgressException(sameContent.get().getKeyValue());
-        }
+        IdempotencyKey created = new IdempotencyKey();
+        created.setKeyValue(key);
+        created.setRequestHash(hash);
+        created.setStatus("COMPLETED");
 
-        IdempotencyKey claim = new IdempotencyKey();
-        claim.setKeyValue(key);
-        claim.setRequestHash(hash);
-        claim.setStatus("IN_PROGRESS");
         try {
-            repository.saveAndFlush(claim);
-            return Optional.empty();
+            repository.saveAndFlush(created);
         } catch (DataIntegrityViolationException e) {
             IdempotencyKey raced = repository.findById(key).orElseThrow();
-            if (!raced.getRequestHash().equals(hash)) {
-                throw new IdempotencyKeyReuseException(key);
-            }
-            if ("IN_PROGRESS".equals(raced.getStatus())) {
-                throw new IdempotencyInProgressException(key);
-            }
-            return Optional.of(raced);
+            return replayOrReject(raced, key, hash, deserializer);
         }
+
+        T result = work.get();
+        created.setResponseStatus(responseStatus);
+        created.setResponseBody(serializer.apply(result));
+        repository.save(created);
+        return result;
     }
 
-    @Transactional
-    public void complete(String key, int status, String responseBody) {
-        IdempotencyKey found = repository.findById(key).orElseThrow();
-        found.setStatus("COMPLETED");
-        found.setResponseStatus(status);
-        found.setResponseBody(responseBody);
-        repository.save(found);
+    private <T> T replayOrReject(IdempotencyKey found,
+                                 String key,
+                                 String hash,
+                                 ThrowingFunction<String, T> deserializer) throws Exception {
+        if (!found.getRequestHash().equals(hash)) {
+            throw new IdempotencyKeyReuseException(key);
+        }
+        return deserializer.apply(found.getResponseBody());
     }
 
     private String hash(String userId, String path, String rawBody) {
@@ -77,5 +79,15 @@ public class IdempotencyService {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @FunctionalInterface
+    public interface ThrowingSupplier<T> {
+        T get() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ThrowingFunction<T, R> {
+        R apply(T value) throws Exception;
     }
 }

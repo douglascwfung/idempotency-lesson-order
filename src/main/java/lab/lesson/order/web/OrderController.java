@@ -1,7 +1,6 @@
 package lab.lesson.order.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lab.lesson.idem.IdempotencyKey;
 import lab.lesson.idem.IdempotencyService;
 import lab.lesson.order.service.OrderService;
 import lab.lesson.order.web.dto.CreateOrderRequest;
@@ -10,8 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/orders")
@@ -41,15 +38,15 @@ public class OrderController {
 
         String userId = currentUserId();
         String rawBody = objectMapper.writeValueAsString(request);
-        Optional<IdempotencyKey> replay = idempotencyService.claimOrReplay(idempotencyKey, userId, "/orders", rawBody);
-
-        if (replay.isPresent()) {
-            return objectMapper.readValue(replay.get().getResponseBody(), OrderResponse.class);
-        }
-
-        OrderResponse response = orderService.create(request);
-        idempotencyService.complete(idempotencyKey, 201, objectMapper.writeValueAsString(response));
-        return response;
+        return idempotencyService.runOrReplay(
+                idempotencyKey,
+                userId,
+                "/orders",
+                rawBody,
+                201,
+                () -> orderService.create(request),
+                objectMapper::writeValueAsString,
+                body -> objectMapper.readValue(body, OrderResponse.class));
     }
 
     @GetMapping("/{id}")
@@ -76,15 +73,15 @@ public class OrderController {
         String userId = currentUserId();
         String path = "/orders/" + id + "/lines";
         String rawBody = objectMapper.writeValueAsString(request);
-        Optional<IdempotencyKey> replay = idempotencyService.claimOrReplay(idempotencyKey, userId, path, rawBody);
-
-        if (replay.isPresent()) {
-            return objectMapper.readValue(replay.get().getResponseBody(), OrderResponse.OrderLineResponse.class);
-        }
-
-        OrderResponse.OrderLineResponse response = orderService.addLine(id, request);
-        idempotencyService.complete(idempotencyKey, 201, objectMapper.writeValueAsString(response));
-        return response;
+        return idempotencyService.runOrReplay(
+                idempotencyKey,
+                userId,
+                path,
+                rawBody,
+                201,
+                () -> orderService.addLine(id, request),
+                objectMapper::writeValueAsString,
+                body -> objectMapper.readValue(body, OrderResponse.OrderLineResponse.class));
     }
 
     @PutMapping("/{id}/lines/{lineId}")

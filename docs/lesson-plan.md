@@ -566,3 +566,71 @@ The earlier tests continue to pass:
 ```
 mvn -Dtest=OrderControllerIdempotencyTest,IdempotencySameContentTest,OrderLineServiceTest test
 ```
+
+
+## Lesson 12: Put the Key and the Order in One Transaction
+
+Lessons 4–11 claim the idempotency key as `IN_PROGRESS` in its own transaction, then create the Order, then complete the key. A crash after the claim leaves a committed `IN_PROGRESS` row and no Order. Lesson 12 removes `IN_PROGRESS` entirely. The key is inserted only inside the same transaction that creates the Order, and it is inserted already as `COMPLETED`.
+
+### Learning Objectives
+
+- Place the key insert and the Order write in a single transaction boundary.
+- Insert the key already as `COMPLETED` — there is no `IN_PROGRESS` status.
+- Confirm that a failure rolls both the key and the Order back so a retry can start fresh.
+- Keep the existing hash (`userId + path + rawBody`), the add-line key behaviour, and primary-key race handling.
+- Remove the same-content in-progress check and the in-progress 409 path.
+
+### Key Concepts
+
+`IdempotencyService.runOrReplay` starts one transaction. When no key exists, the service inserts a row with status `COMPLETED` and flushes so the primary key rejects a concurrent insert of the same key. It then runs the Order write and stores the response body on that same row. The transaction commits with the key already `COMPLETED` and the Order present. There is never an `IN_PROGRESS` status — not committed and not used as a transient value. If the process crashes before commit, both the key insert and the Order write roll back. A retry finds no row and starts fresh. Concurrent claims of the same key still hit the primary key; the service catches `DataIntegrityViolationException`, reloads the key, and either replays the completed response or throws `IdempotencyKeyReuseException` on a hash mismatch. The hash remains `userId + path + rawBody`. Add-line continues to use the same `runOrReplay` path. The same-content in-progress check and `IdempotencyInProgressException` are removed because there is no in-progress state to observe.
+
+### What You Will Build
+
+- `IdempotencyService.runOrReplay` that inserts the key as `COMPLETED`, runs the work, and stores the response inside one `@Transactional` method.
+- Updated `OrderController.create` and `OrderController.addLine` that call `runOrReplay` instead of separate `claimOrReplay` and `complete` calls.
+- Removal of `IdempotencyInProgressException`, its exception-handler mapping, and `findFirstByRequestHashAndStatus`.
+- A Spring Boot test (`IdempotencySingleTransactionTest`) that verifies a successful create leaves a `COMPLETED` key with the Order, that a failure rolls both back, and that a replay does not create a second Order.
+- An updated race test that asserts a concurrent insert replays the completed response or rejects a hash mismatch.
+
+### Deliberate Design Decisions
+
+The key is inserted as `COMPLETED` before the Order write runs, still inside the same transaction. The early `saveAndFlush` lets the primary key reject a concurrent claim before a second Order is created. Because the insert and the Order share one commit, a crash never leaves a key row behind. Recovery code that deletes or leases stuck `IN_PROGRESS` rows is not required. The same-content in-progress check is dropped: without `IN_PROGRESS` there is no running key to return. Hash reuse with different content still returns 409 through `IdempotencyKeyReuseException`.
+
+### Implementation Outline
+
+1. Replace `claimOrReplay` and `complete` with `runOrReplay` on `IdempotencyService`. On a miss, insert the key as `COMPLETED`, run the work, then store the response body on the same row.
+2. On `DataIntegrityViolationException`, reload the key and replay or reject hash mismatch. Do not throw an in-progress exception.
+3. Change `OrderController.create` and `OrderController.addLine` to call `runOrReplay`.
+4. Delete `IdempotencyInProgressException`, remove its handler method, and remove `findFirstByRequestHashAndStatus`.
+5. Add `IdempotencySingleTransactionTest` and update `IdempotencyServiceRaceTest`.
+
+### Verify Your Work
+
+Run the single-transaction integration test:
+
+```
+mvn -Dtest=IdempotencySingleTransactionTest test
+```
+
+The following methods must pass:
+
+- `createWithKeyCommitsOrderAndCompletedKeyTogether`
+- `failedWorkRollsBackKeyAndOrder`
+- `completedKeyReplaysWithoutSecondOrder`
+
+Run the race test:
+
+```
+mvn -Dtest=IdempotencyServiceRaceTest test
+```
+
+The following methods must pass:
+
+- `concurrentClaimOfSameKeyReplaysCompletedResponse`
+- `concurrentClaimWithDifferentHashThrowsReuse`
+
+The controller idempotency tests continue to pass:
+
+```
+mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerAddLineIdempotencyTest test
+```
