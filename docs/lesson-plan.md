@@ -595,7 +595,7 @@ mvn -Dtest=OrderControllerIdempotencyTest,OrderControllerAddLineIdempotencyTest 
 
 ## Lesson 13: Pass Order Work as a Lambda into the Key Method
 
-Lesson 12 put the key insert and the Order write in one transaction, with the key inserted already as `COMPLETED`. That lesson focused on the transaction boundary and the removal of `IN_PROGRESS`. Lesson 13 makes the call shape deliberate: the Order work is passed into the key method as a lambda (work callback). The key method owns the transaction and the key lifecycle. Callers supply only the domain work. The lambda runs inside the open transaction — the same box described for the sibling course's Lesson 9.
+Lesson 12 put the key insert and the Order write in one transaction, with the key inserted already as `COMPLETED`. That lesson focused on the transaction boundary and the removal of `IN_PROGRESS`. Lesson 13 makes the call shape deliberate: the Order work is passed into the key method as a lambda (work callback). The key method owns the transaction and the key lifecycle. Callers supply only the domain work. The lambda runs inside the open transaction that the key method owns.
 
 ### Learning Objectives
 
@@ -617,7 +617,7 @@ Lesson 12 put the key insert and the Order write in one transaction, with the ke
 
 ### Deliberate Design Decisions
 
-Lesson 12 already achieved one transaction without teaching the lambda. Lesson 13 does not change the `COMPLETED`-only insert or the race handling. It makes the callback the extension point: mixed add+update work (sibling Lesson 8 style), different exception policies inside the work, and new idempotent endpoints can each pass a different lambda without copying claim/replay/hash code. The tradeoff is that the call site is slightly harder to read at first — the Order write is no longer a direct line in the key method. That cost is accepted so the key method stays generic.
+Lesson 12 already achieved one transaction without teaching the lambda. Lesson 13 does not change the `COMPLETED`-only insert or the race handling. It makes the callback the extension point: mixed add+update work in one request, different exception policies inside the work, and new idempotent endpoints can each pass a different lambda without copying claim/replay/hash code. The tradeoff is that the call site is slightly harder to read at first — the Order write is no longer a direct line in the key method. That cost is accepted so the key method stays generic.
 
 ### Implementation Outline
 
